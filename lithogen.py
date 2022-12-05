@@ -103,8 +103,9 @@ def img_to_circular_mesh(depth_pixels, radius_mm, max_depth_mm, base_height_mm=1
 
     unit_vecs = [arr([np.sin(i*rads_per_cell), np.cos(i*rads_per_cell)]) for i in range(n_cols)]
     vecs_img = np.repeat(arr(unit_vecs).reshape((1,-1,2)), n_rows, axis=0)
-    base_vecs_img = radius_mm * vecs_img
-    tex_vecs_img = (radius_mm + depth_pixels)[:, :, np.newaxis] * vecs_img
+    #base_vecs_img = radius_mm * vecs_img
+    base_vecs_img = (radius_mm - 0.5*depth_pixels)[:, :, np.newaxis] * vecs_img
+    tex_vecs_img = (radius_mm + 0.5*depth_pixels)[:, :, np.newaxis] * vecs_img
 
     z_img = arr([[r/n_rows * height_mm] * n_cols for r in range(n_rows)])
     z_img = np.expand_dims(z_img, axis=2)
@@ -205,7 +206,7 @@ def main(is_flat, infile_name, outfile_name, width, radius, candle_radius):
     else:
         trips_list = img_to_circular_mesh(depth_pixels, radius_mm, max_depth_mm)
         if candle_radius_mm is not None:
-            trips_list += add_candle_base(radius_mm + max_depth_mm, candle_radius_mm)
+            trips_list += add_candle_base(radius_mm + max_depth_mm/2, candle_radius_mm, n_tris=depth_pixels.shape[1])
 
     save_as_stl(outfile_name, trips_list)
 
