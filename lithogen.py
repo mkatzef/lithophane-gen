@@ -77,19 +77,29 @@ def img_to_planar_mesh(depth_pixels, width_mm):
     return trips_list
 
 
-def img_to_circular_mesh(depth_pixels, radius_mm, max_depth_mm):
+def img_to_circular_mesh(depth_pixels, radius_mm, max_depth_mm, base_height_mm=16):
     depth_pixels = np.fliplr(depth_pixels)
 
     # add border of zeros
-    n_rows = len(depth_pixels) + 2
     n_cols = len(depth_pixels[0]) + 1
+    n_depth_rows = len(depth_pixels)
+    rads_per_cell = 2*np.pi / (n_cols-1)
+    cell_height_mm = 2*np.pi*radius_mm / n_cols
+    n_base_rows = int(base_height_mm / cell_height_mm)
+
+    n_rows = n_depth_rows + n_base_rows + 2
+    height_mm = n_rows * cell_height_mm
+
     tmp = np.zeros((n_rows, n_cols))
-    tmp[1:-1, :-1] = depth_pixels
-    tmp[1:-1, -1] = depth_pixels[:,0]
+    tmp[n_base_rows+1:-1, :-1] = depth_pixels
+    tmp[n_base_rows+1:-1, -1] = depth_pixels[:,0]
     depth_pixels = tmp
 
-    rads_per_cell = 2*np.pi / (n_cols-1)
-    height_mm = 2*np.pi*radius_mm * n_rows / n_cols
+    # add base border
+    n_ridge_changes = 9  # keep odd
+    cells_per_ridge = n_base_rows // n_ridge_changes
+    for i in range(1, n_base_rows):
+        depth_pixels[i, :] = max_depth_mm if 1-((i-1)//cells_per_ridge)%2 else max_depth_mm-1
 
     unit_vecs = [arr([np.sin(i*rads_per_cell), np.cos(i*rads_per_cell)]) for i in range(n_cols)]
     vecs_img = np.repeat(arr(unit_vecs).reshape((1,-1,2)), n_rows, axis=0)
@@ -119,22 +129,23 @@ def img_to_circular_mesh(depth_pixels, radius_mm, max_depth_mm):
     return trips_list
 
 
-def add_candle_base(outer_radius_mm, candle_radius_mm, n_tris=100, base_height_mm=2):
+def add_candle_base(outer_radius_mm, candle_radius_mm, n_tris=100, base_bottom_z=0, base_thickness=2):
     rads_per_tri = 2*np.pi / n_tris
     outer_tri_points = [outer_radius_mm * arr([np.sin((i-0.5)*rads_per_tri), np.cos((i-0.5)*rads_per_tri), 0]) for i in range(n_tris)]
     inner_tri_points = [candle_radius_mm * arr([np.sin(i*rads_per_tri), np.cos(i*rads_per_tri), 0]) for i in range(n_tris)]
 
     trips_list = []
-    offset = arr([0, 0, base_height_mm])
+    offset_bottom = arr([0, 0, base_bottom_z])
+    offset_top = arr([0, 0, base_thickness])
     for tri_i in range(n_tris):
-        o1 = outer_tri_points[tri_i]
-        o2 = outer_tri_points[(tri_i + 1) % n_tris]
-        i1 = inner_tri_points[tri_i]
-        i2 = inner_tri_points[(tri_i + 1) % n_tris]
-        o1o = o1 + offset
-        o2o = o2 + offset
-        i1o = i1 + offset
-        i2o = i2 + offset
+        o1 = outer_tri_points[tri_i] + offset_bottom
+        o2 = outer_tri_points[(tri_i + 1) % n_tris] + offset_bottom
+        i1 = inner_tri_points[tri_i] + offset_bottom
+        i2 = inner_tri_points[(tri_i + 1) % n_tris] + offset_bottom
+        o1o = o1 + offset_top
+        o2o = o2 + offset_top
+        i1o = i1 + offset_top
+        i2o = i2 + offset_top
 
         # bottom (level 0)
         trips_list += [
@@ -221,3 +232,9 @@ if __name__ == "__main__":
         outfile = args.outfile
 
     main(is_flat, args.infile, outfile, args.width, args.radius, args.candle_radius)
+
+    gen_base = False
+    if gen_base:
+        trips_list = add_candle_base(35, 20, base_bottom_z=0, base_thickness=12)
+        trips_list += add_candle_base(35, 10, base_bottom_z=-1, base_thickness=1)
+        save_as_stl('base.stl', trips_list)
