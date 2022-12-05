@@ -95,17 +95,37 @@ def img_to_circular_mesh(depth_pixels, radius_mm, max_depth_mm, base_height_mm=1
     tmp[n_base_rows+1:-1, -1] = depth_pixels[:,0]
     depth_pixels = tmp
 
-    # add base border
-    n_ridge_changes = 9  # keep odd
-    cells_per_ridge = n_base_rows // n_ridge_changes
-    for i in range(1, n_base_rows):
-        depth_pixels[i, :] = max_depth_mm if 1-((i-1)//cells_per_ridge)%2 else max_depth_mm-1
+    if base_height_mm > 0:
+        # add base border
+        n_ridge_changes = 9  # keep odd
+        n_divot_holes = 8
+        divot_hole_width_rads = np.radians(15)
+        pixels_per_hole = int(divot_hole_width_rads / (2*np.pi) * n_cols)
+        pixels_between_hole_starts = int(n_cols / n_divot_holes)
+        cells_per_ridge = n_base_rows // n_ridge_changes
+        base_offset = n_base_rows - n_ridge_changes * cells_per_ridge + 1
+        depth_pixels[1:base_offset, :] = max_depth_mm
+        shifted = False
+        had_left_divot = False
+        for i in range(base_offset, n_base_rows):
+            if ((i-base_offset)//cells_per_ridge) % 2:
+                # divot
+                if had_left_divot:
+                    shifted = not shifted
+                    had_left_divot = False
+                depth_pixels[i, :] = max_depth_mm - 1
+                for j in range(n_divot_holes):
+                    hole_start = int((j+shifted/2) * pixels_between_hole_starts)
+                    depth_pixels[i, max(1, hole_start) : min(n_cols-1, hole_start+pixels_per_hole)] = 0
+            else:
+                # ridge
+                depth_pixels[i, :] = max_depth_mm
+                had_left_divot = True
 
     unit_vecs = [arr([np.sin(i*rads_per_cell), np.cos(i*rads_per_cell)]) for i in range(n_cols)]
     vecs_img = np.repeat(arr(unit_vecs).reshape((1,-1,2)), n_rows, axis=0)
-    #base_vecs_img = radius_mm * vecs_img
-    base_vecs_img = (radius_mm - 0.5*depth_pixels)[:, :, np.newaxis] * vecs_img
-    tex_vecs_img = (radius_mm + 0.5*depth_pixels)[:, :, np.newaxis] * vecs_img
+    base_vecs_img = radius_mm * vecs_img
+    tex_vecs_img = (radius_mm + depth_pixels)[:, :, np.newaxis] * vecs_img
 
     z_img = arr([[r/n_rows * height_mm] * n_cols for r in range(n_rows)])
     z_img = np.expand_dims(z_img, axis=2)
@@ -185,12 +205,12 @@ def save_as_stl(outfile_name, trips_list):
     my_mesh.save(outfile_name)
 
 
-def main(is_flat, infile_name, outfile_name, width, radius, candle_radius):
+def main(is_flat, infile_name, outfile_name, width, radius, candle_radius, base_height_mm):
     width_mm = width
     radius_mm = radius
     candle_radius_mm = candle_radius
-    max_depth_mm = 2
-    min_depth_mm = 0.5
+    max_depth_mm = 2.5
+    min_depth_mm = 0.4
 
     pic = imageio.imread(infile_name)
     depth_pixels = to_gray(pic)
@@ -204,9 +224,9 @@ def main(is_flat, infile_name, outfile_name, width, radius, candle_radius):
     if is_flat:
         trips_list = img_to_planar_mesh(depth_pixels, width_mm)
     else:
-        trips_list = img_to_circular_mesh(depth_pixels, radius_mm, max_depth_mm)
+        trips_list = img_to_circular_mesh(depth_pixels, radius_mm, max_depth_mm, base_height_mm=base_height_mm)
         if candle_radius_mm is not None:
-            trips_list += add_candle_base(radius_mm + max_depth_mm/2, candle_radius_mm, n_tris=depth_pixels.shape[1])
+            trips_list += add_candle_base(radius_mm + max_depth_mm, candle_radius_mm, n_tris=depth_pixels.shape[1])
 
     save_as_stl(outfile_name, trips_list)
 
@@ -219,6 +239,7 @@ if __name__ == "__main__":
     parser.add_argument("--width", nargs='?', type=float, help="width in mm", default=70)
     parser.add_argument("--radius", nargs='?', type=float, help="radius in mm", default=30)
     parser.add_argument("--candle_radius", nargs='?', type=float, help="radius of candle hole in mm", default=None)
+    parser.add_argument("--base_height", nargs='?', type=float, help="height added to base of round lith in mm", default=16)
     args = parser.parse_args()
 
     assert args.mode in ['flat', 'round'], "unsupported mode: " + str(args.mode)
@@ -232,7 +253,7 @@ if __name__ == "__main__":
     else:
         outfile = args.outfile
 
-    main(is_flat, args.infile, outfile, args.width, args.radius, args.candle_radius)
+    main(is_flat, args.infile, outfile, args.width, args.radius, args.candle_radius, args.base_height)
 
     gen_base = False
     if gen_base:
