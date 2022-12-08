@@ -97,8 +97,8 @@ def img_to_circular_mesh(depth_pixels, radius_mm, max_depth_mm, base_height_mm=1
 
     if base_height_mm > 0:
         # add base border
-        n_ridge_changes = 9  # keep odd
-        n_divot_holes = 8
+        n_ridge_changes = 7  # keep odd
+        n_divot_holes = 6
         divot_hole_width_rads = np.radians(15)
         pixels_per_hole = int(divot_hole_width_rads / (2*np.pi) * n_cols)
         pixels_between_hole_starts = int(n_cols / n_divot_holes)
