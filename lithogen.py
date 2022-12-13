@@ -35,6 +35,8 @@ def get_tr_cones(origin, step, up, diag, right):
 
 
 def get_tr_cones_circ(base_here, base_up, base_diag, base_right, val_here, val_up, val_diag, val_right):
+    if (abs(arr([val_here-base_here, val_up-base_up, val_diag-base_diag, val_right-base_right])) < 1e-3).all():
+        return []
     return [
         [val_here, val_up, val_diag],
         [val_diag, val_right, val_here],
