@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 from stl import mesh
 import imageio
+from PIL import Image
 
 arr = np.array
 
@@ -213,10 +214,28 @@ def main(is_flat, infile_name, outfile_name, width, radius, candle_radius, base_
     candle_radius_mm = candle_radius
     max_depth_mm = 2.5
     min_depth_mm = 0.4
+    min_pixel_width_mm = 0.25  # reduces image resolution if too high detail
 
     pic = imageio.imread(infile_name)
     depth_pixels = to_gray(pic)
     depth_pixels = np.flipud(depth_pixels)
+
+    # resize
+    circ_mm = 2 * np.pi * radius
+    max_cols_px = int(circ_mm / min_pixel_width_mm)
+    n_cols = len(depth_pixels[0])
+    n_rows = len(depth_pixels)
+    if max_cols_px < n_cols:
+        row_mult = max_cols_px / n_cols
+        rows_px = int(row_mult * n_rows)
+        cols_px = max_cols_px
+    else:
+        cols_px = n_cols
+        rows_px = n_rows
+
+    im = Image.fromarray(np.uint8(depth_pixels))
+    depth_pixels = np.array(im.resize((cols_px, rows_px)), dtype=float)
+
     max_val = np.amax(depth_pixels)
     depth_pixels = max_val - depth_pixels  # invert heights
     depth_pixels *= (max_depth_mm - min_depth_mm) / max_val  # scale to given depth range

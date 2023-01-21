@@ -17,7 +17,7 @@ Example image (named sydney.jpeg):
 
 Example command:  
 ```
-py lithogen.py round sydney.jpeg --candle_radius=20 --radius=30
+python3 lithogen.py round sydney.jpeg --candle_radius=20 --radius=30
 ```
 
 Example output:  
