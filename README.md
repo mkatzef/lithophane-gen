@@ -9,7 +9,9 @@ Uses python and the following (pip-available) packages:
 * `numpy`  
 * `numpy-stl`
 * `imageio`
+* `Pillow`
 
+The included `setup.py` file installs the above; to run it use `pip install .`
 
 ## Usage
 Example image (named sydney.jpeg):  

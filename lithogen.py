@@ -208,20 +208,16 @@ def save_as_stl(outfile_name, trips_list):
     my_mesh.save(outfile_name)
 
 
-def main(is_flat, infile_name, outfile_name, width, radius, candle_radius, base_height_mm):
-    width_mm = width
-    radius_mm = radius
-    candle_radius_mm = candle_radius
-    max_depth_mm = 2.5
-    min_depth_mm = 0.4
-    min_pixel_width_mm = 0.25  # reduces image resolution if too high detail
+def main(is_flat, infile_name, outfile_name, width_mm, radius_mm,
+    candle_radius_mm=None, base_height_mm=None, max_depth_mm=2.5,
+    min_depth_mm=0.4, min_pixel_width_mm=0.15):
 
     pic = imageio.imread(infile_name)
     depth_pixels = to_gray(pic)
     depth_pixels = np.flipud(depth_pixels)
 
     # resize
-    circ_mm = 2 * np.pi * radius
+    circ_mm = 2 * np.pi * radius_mm
     max_cols_px = int(circ_mm / min_pixel_width_mm)
     n_cols = len(depth_pixels[0])
     n_rows = len(depth_pixels)
@@ -240,7 +236,6 @@ def main(is_flat, infile_name, outfile_name, width, radius, candle_radius, base_
     depth_pixels = max_val - depth_pixels  # invert heights
     depth_pixels *= (max_depth_mm - min_depth_mm) / max_val  # scale to given depth range
     depth_pixels += min_depth_mm
-
 
     if is_flat:
         trips_list = img_to_planar_mesh(depth_pixels, width_mm)
@@ -261,20 +256,29 @@ if __name__ == "__main__":
     parser.add_argument("--radius", nargs='?', type=float, help="radius in mm", default=30)
     parser.add_argument("--candle_radius", nargs='?', type=float, help="radius of candle hole in mm", default=None)
     parser.add_argument("--base_height", nargs='?', type=float, help="height added to base of round lith in mm", default=16)
+    parser.add_argument("--max_depth", nargs='?', type=float, help="maximum thickness of lith in mm", default=2.5)
+    parser.add_argument("--min_depth", nargs='?', type=float, help="minimum thickness of lith in mm", default=0.4)
+    parser.add_argument("--min_pixel_width", nargs='?', type=float, help="minimum width in mm of each pixel in image (reduces image res as needed)", default=0.15)
+
     args = parser.parse_args()
 
     assert args.mode in ['flat', 'round'], "unsupported mode: " + str(args.mode)
     is_flat = args.mode == 'flat'
 
     if args.outfile is None:
+        base_name = ".".join(args.infile.split('.')[:-1])
         if is_flat:
-            outfile = './out-flat.stl'
+            outfile = '%s-flat.stl' % base_name
         else:
-            outfile = './out-round.stl'
+            outfile = '%s-round.stl' % base_name
     else:
         outfile = args.outfile
 
-    main(is_flat, args.infile, outfile, args.width, args.radius, args.candle_radius, args.base_height)
+    main(is_flat=is_flat, infile_name=args.infile, outfile_name=outfile,
+        width_mm=args.width, radius_mm=args.radius,
+        candle_radius_mm=args.candle_radius, base_height_mm=args.base_height,
+        max_depth_mm=args.max_depth, min_depth_mm=args.min_depth,
+        min_pixel_width_mm=args.min_pixel_width)
 
     gen_base = False
     if gen_base:
