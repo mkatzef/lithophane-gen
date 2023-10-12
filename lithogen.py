@@ -8,6 +8,9 @@ arr = np.array
 
 
 def get_tr_cones(origin, step, up, diag, right):
+    """
+    Returns a set of 4 triangles ; 2 making a square base and 2 giving the top (texture) layer.
+    """
     ox, oy, oz = origin
     triplets = [
         [
@@ -36,6 +39,10 @@ def get_tr_cones(origin, step, up, diag, right):
 
 
 def get_tr_cones_circ(base_here, base_up, base_diag, base_right, val_here, val_up, val_diag, val_right):
+    """
+    Returns 2 base triangles and 2 texture triangles as one cell of a circular stl
+    """
+    # Close to zero, treat as empty
     if (abs(arr([val_here-base_here, val_up-base_up, val_diag-base_diag, val_right-base_right])) < 1e-3).all():
         return []
     return [
@@ -47,10 +54,16 @@ def get_tr_cones_circ(base_here, base_up, base_diag, base_right, val_here, val_u
 
 
 def to_gray(rgb):
+    """
+    Color to grayscale
+    """
     return np.dot(rgb[... , :3] , [0.299 , 0.587, 0.114])
 
 
 def img_to_planar_mesh(depth_pixels, width_mm):
+    """
+    2D lithograph gen
+    """
     # add border of zeros
     n_rows = len(depth_pixels) + 2
     n_cols = len(depth_pixels[0]) + 2
@@ -81,6 +94,9 @@ def img_to_planar_mesh(depth_pixels, width_mm):
 
 
 def img_to_circular_mesh(depth_pixels, radius_mm, max_depth_mm, base_height_mm=16):
+    """
+    Circular lithograph gen
+    """
     depth_pixels = np.fliplr(depth_pixels)
 
     # add border of zeros
@@ -247,41 +263,60 @@ def main(is_flat, infile_name, outfile_name, width_mm, radius_mm,
     save_as_stl(outfile_name, trips_list)
 
 
+def create_holder(radius_mm, candle_radius_mm=20, base_height_mm=16,
+    max_depth_mm=2.5, min_pixel_width_mm=0.15, inset_depth_mm=1, inset_height_mm=1.5, inset_tol_mm=0.1):
+    
+    inner_radius = radius_mm - inset_depth_mm
+    
+    n_cells_x = int(2*np.pi*radius_mm / min_pixel_width_mm)
+    n_cells_y = int(inset_height_mm / min_pixel_width_mm)
+    dummy_depth = (inset_depth_mm - inset_tol_mm) * np.ones((n_cells_y, n_cells_x))
+    max_depth_mm += inset_depth_mm
+
+    trips_list = img_to_circular_mesh(dummy_depth, inner_radius, max_depth_mm, base_height_mm=base_height_mm)
+
+    trips_list += add_candle_base(inner_radius + max_depth_mm, candle_radius_mm, n_tris=n_cells_x)
+    trips_list += add_candle_base(inner_radius + max_depth_mm, candle_radius_mm=0, n_tris=n_cells_x, base_thickness=1, base_bottom_z=-1)
+    
+    save_as_stl("holder_inset2.5.stl", trips_list)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", help="flat or round")
-    parser.add_argument("infile", help="input image (png, jpeg, etc)")
+    parser.add_argument("mode", help="flat, round, or holder")
+    parser.add_argument("infile", nargs='?', help="input image (png, jpeg, etc)")
     parser.add_argument("outfile", nargs='?', help="name for output stl", default=None)
     parser.add_argument("--width", nargs='?', type=float, help="width in mm", default=70)
     parser.add_argument("--radius", nargs='?', type=float, help="radius in mm", default=30)
     parser.add_argument("--candle_radius", nargs='?', type=float, help="radius of candle hole in mm", default=None)
-    parser.add_argument("--base_height", nargs='?', type=float, help="height added to base of round lith in mm", default=16)
-    parser.add_argument("--max_depth", nargs='?', type=float, help="maximum thickness of lith in mm", default=2.5)
-    parser.add_argument("--min_depth", nargs='?', type=float, help="minimum thickness of lith in mm", default=0.4)
+    parser.add_argument("--base_height", nargs='?', type=float, help="height added to base of round lith in mm", default=0)
+    parser.add_argument("--max_depth", nargs='?', type=float, help="maximum thickness of lith in mm", default=2.0)
+    parser.add_argument("--min_depth", nargs='?', type=float, help="minimum thickness of lith in mm", default=0.7)
     parser.add_argument("--min_pixel_width", nargs='?', type=float, help="minimum width in mm of each pixel in image (reduces image res as needed)", default=0.15)
 
     args = parser.parse_args()
 
-    assert args.mode in ['flat', 'round'], "unsupported mode: " + str(args.mode)
+    assert args.mode in ['flat', 'round', 'holder'], "unsupported mode: " + str(args.mode)
     is_flat = args.mode == 'flat'
 
-    if args.outfile is None:
-        base_name = ".".join(args.infile.split('.')[:-1])
-        if is_flat:
-            outfile = '%s-flat.stl' % base_name
-        else:
-            outfile = '%s-round.stl' % base_name
+    if args.mode == 'holder':
+        cr = args.candle_radius or 20  # if none
+        bh = args.base_height or 16
+        create_holder(args.radius, candle_radius_mm=cr, base_height_mm=bh,
+            max_depth_mm=args.max_depth, min_pixel_width_mm=args.min_pixel_width, inset_depth_mm=2.5, inset_height_mm=1.5)
     else:
-        outfile = args.outfile
+        assert args.infile is not None, 'This mode requires an input filename'
+        if args.outfile is None:
+            base_name = ".".join(args.infile.split('.')[:-1])
+            if is_flat:
+                outfile = '%s-flat.stl' % base_name
+            else:
+                outfile = '%s-round.stl' % base_name
+        else:
+            outfile = args.outfile
 
-    main(is_flat=is_flat, infile_name=args.infile, outfile_name=outfile,
-        width_mm=args.width, radius_mm=args.radius,
-        candle_radius_mm=args.candle_radius, base_height_mm=args.base_height,
-        max_depth_mm=args.max_depth, min_depth_mm=args.min_depth,
-        min_pixel_width_mm=args.min_pixel_width)
-
-    gen_base = False
-    if gen_base:
-        trips_list = add_candle_base(35, 20, base_bottom_z=0, base_thickness=12)
-        trips_list += add_candle_base(35, 10, base_bottom_z=-1, base_thickness=1)
-        save_as_stl('base.stl', trips_list)
+        main(is_flat=is_flat, infile_name=args.infile, outfile_name=outfile,
+            width_mm=args.width, radius_mm=args.radius,
+            candle_radius_mm=args.candle_radius, base_height_mm=args.base_height,
+            max_depth_mm=args.max_depth, min_depth_mm=args.min_depth,
+            min_pixel_width_mm=args.min_pixel_width)
